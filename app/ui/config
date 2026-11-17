@@ -1,0 +1,17 @@
+{
+    ".url": {
+        "mediaqc.Application": {
+            "title": "媒体画质管家",
+            "desc": "扫描并清理低画质视频",
+            "icon": "images/icon_{0}.png",
+            "type": "iframe",
+            "url": "/app/mediaqc/",
+            "gatewaySocket": "mediaqc.sock",
+            "gatewayPrefix": "/app/mediaqc",
+            "allUsers": false,
+            "control": {
+                "accessPerm": "editable"
+            }
+        }
+    }
+}

@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>媒体画质管家</title>
+<script>
+  /* 统一网关可能去掉结尾斜杠，补齐后再加载相对资源 */
+  if (!location.pathname.endsWith('/')) {
+    location.replace(location.pathname + '/' + location.search + location.hash);
+  }
+</script>
+<link rel="stylesheet" href="style.css?v=14">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">QC</div>
+    <div>
+      <h1>媒体画质管家</h1>
+      <div class="sub" id="rootInfo">未选择扫描目录</div>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn" id="btnScan">扫描+体检</button>
+    <button class="btn ghost" id="btnInspect" title="只对尚未体检的文件做抽帧分析">仅体检</button>
+    <button class="btn ghost" id="btnStop" disabled>停止</button>
+    <button class="btn ghost" id="btnCfg">设置</button>
+  </div>
+</header>
+
+<section class="rootsbar" id="rootsBar"></section>
+
+<section class="stats" id="stats"></section>
+
+<section class="progress" id="progress">
+  <div class="prow">
+    <div class="bar"><div class="fill" id="pFill"></div></div>
+    <button class="btn ghost small" id="pClose">收起</button>
+  </div>
+  <div class="ptext" id="pText">尚未扫描</div>
+</section>
+
+<section class="toolbar">
+  <div class="filters">
+    <button class="chip on" data-flag="all">全部</button>
+    <button class="chip" data-flag="A">A 低分辨率</button>
+    <button class="chip" data-flag="B">B 低码率</button>
+    <button class="chip" data-flag="C">C 老编码</button>
+    <button class="chip" data-flag="D">D 疑似低质源</button>
+    <button class="chip" data-flag="E">E 同片冗余</button>
+    <button class="chip" data-flag="none">合格</button>
+  </div>
+  <div class="filters right">
+    <input class="input" id="q" placeholder="搜索文件名…">
+    <select class="input" id="verdict">
+      <option value="all">结论：全部</option>
+      <option value="bad">差</option>
+      <option value="ok">优秀</option>
+    </select>
+    <select class="input" id="qfilter">
+      <option value="all">体检：全部</option>
+      <option value="fail">画面不及格(&lt;70)</option>
+      <option value="f">模糊</option>
+      <option value="s">略软</option>
+      <option value="p">假高清</option>
+      <option value="k">块效应</option>
+      <option value="c">对比度低</option>
+      <option value="todo">未体检</option>
+    </select>
+    <select class="input" id="sort">
+      <option value="total">综合评分（差→好）</option>
+      <option value="total_desc">综合评分（好→差）</option>
+      <option value="vbitrate">视频码率（低→高）</option>
+      <option value="size">体积（大→小）</option>
+      <option value="name">名称</option>
+    </select>
+    <span id="dpBox"></span>
+    <button class="btn ghost" id="btnExport">导出 CSV</button>
+  </div>
+</section>
+
+<section class="tablewrap">
+  <table id="tbl">
+    <thead>
+      <tr>
+        <th class="c-chk"><input type="checkbox" id="chkAll" title="全选当前页"></th>
+        <th>文件</th><th>分辨率</th><th>视频码率</th><th>编码</th>
+        <th>时长</th><th>体积</th>
+        <th title="综合评分 = 清晰度分（由模糊指数按人工样本标定换算）；块效应只作提示标签">综合评分</th>
+        <th>结论</th><th>判定</th>
+        <th class="c-act">操作</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  <div class="empty" id="empty">
+    <div>还没有扫描数据</div>
+    <div class="hint">选「扫描+体检」会用 ffprobe 读取参数并抽帧评估画面，然后给出综合分与结论。</div>
+  </div>
+</section>
+
+<footer class="bottombar">
+  <div>已选 <b id="selCount">0</b> 个 · 合计 <b id="selSize">0</b> <span class="hint" id="selHint"></span></div>
+  <div class="pagebar">
+    <button class="btn ghost" id="prev">上一页</button>
+    <span id="pageInfo">1 / 1</span>
+    <button class="btn ghost" id="next">下一页</button>
+  </div>
+  <div class="actions">
+    <button class="btn ghost" id="btnKeep">保留</button>
+    <button class="btn danger" id="btnDelete">删除</button>
+    <button class="btn" id="btnMove">移动…</button>
+  </div>
+</footer>
+
+<!-- 目录选择 -->
+<div class="modal" id="mPick" hidden>
+  <div class="dialog">
+    <h3 id="pickTitle">选择目录</h3>
+    <div class="pathline">
+      <button class="btn ghost small" id="pickUp">↑ 上一级</button>
+      <code id="pickPath">/</code>
+    </div>
+    <ul class="dirlist" id="pickList"></ul>
+    <div class="dialog-actions">
+      <button class="btn ghost" data-close>取消</button>
+      <button class="btn primary" id="pickOk">选中此目录</button>
+    </div>
+  </div>
+</div>
+
+<!-- 预览 -->
+<div class="modal" id="mPreview" hidden>
+  <div class="dialog wide">
+    <h3 id="pvTitle">预览</h3>
+    <div class="pvbar">
+      <button class="chip on" id="pvDirect" title="原文件直出（HTTP Range/206，可拖动进度条、零转码）">原文件直出</button>
+      <button class="chip" id="pvRemux" title="ffmpeg 转封装（mkv 等容器兜底，不能拖动）">转封装</button>
+      <button class="chip" id="pvTrans" title="NVIDIA 硬件转码 720p（10bit/HEVC 兜底）">硬件转码</button>
+      <label class="inline">起播 <input class="input tiny" id="pvStart" value="0"> 秒</label>
+      <button class="btn ghost small" id="pvReload">重新加载</button>
+      <button class="btn ghost small" id="pvShot">截 3 帧</button>
+      <span class="hint" style="font-size:11px">直出失败会自动降级到转封装/转码</span>
+      <a class="btn ghost small" id="pvDownload" target="_blank" rel="noopener">下载原文件</a>
+    </div>
+    <div class="pvbox" id="pvBox">
+      <video id="pvVideo" controls playsinline preload="metadata"></video>
+      <div class="pvload" id="pvLoad" hidden><span class="dot"></span>正在起流…</div>
+    </div>
+    <div class="pvctl" id="pvCtl" hidden>
+      <button class="pvbtn" id="pvPlay" title="播放 / 暂停">
+        <svg viewBox="0 0 16 16"><rect x="4.5" y="3" width="2.6" height="10" rx="1"/><rect x="9" y="3" width="2.6" height="10" rx="1"/></svg>
+      </button>
+      <span class="pvtime" id="pvTime"><b>0:00</b><i>/ 0:00</i></span>
+      <input type="range" id="pvSeek" min="0" max="100" step="0.5" value="0">
+      <button class="pvbtn txt" id="pvBack" title="后退 10 秒">−10s</button>
+      <button class="pvbtn txt" id="pvFwd" title="前进 10 秒">+10s</button>
+      <button class="pvbtn" id="pvFull" title="全屏">
+        <svg viewBox="0 0 16 16"><path d="M2 6V3.5A1.5 1.5 0 0 1 3.5 2H6v1.6H3.6V6H2zm8-4h2.5A1.5 1.5 0 0 1 14 3.5V6h-1.6V3.6H10V2zM2 10h1.6v2.4H6V14H3.5A1.5 1.5 0 0 1 2 12.5V10zm10.4 0H14v2.5a1.5 1.5 0 0 1-1.5 1.5H10v-1.6h2.4V10z"/></svg>
+      </button>
+    </div>
+    <div class="hint" id="pvHint"></div>
+    <div class="shots" id="pvShots"></div>
+    <div class="dialog-actions"><button class="btn ghost" data-close>关闭</button></div>
+  </div>
+</div>
+
+<!-- 设置 -->
+<div class="modal" id="mCfg" hidden>
+  <div class="dialog wide">
+    <h3>设置</h3>
+    <div class="cfgsec">
+      <h4>扫描与体检</h4>
+      <label class="chk"><input type="checkbox" id="cfgInspect"> 扫描时同时做画面体检（关闭则只有参数分）</label>
+      <label class="chk"><input type="checkbox" id="cfgHideSys"> 目录浏览时隐藏系统目录（docker / thumb / vm / appcenter-downloads 等）</label>
+      <label>抽帧数量（在 15%~85% 区间等间隔取帧，取第 20% 分位作为清晰度；建议 8~16，16 更稳）<input class="input" id="cfgFrames" type="number" min="1" max="20"></label>
+      <label>体检并发（1~6，机械盘建议 ≤4）<input class="input" id="cfgQConc" type="number" min="1" max="6"></label>
+      <label class="chk"><input type="checkbox" id="cfgGpu"> 体检时用 NVIDIA 硬解（实验性）</label>
+      <label class="chk"><input type="checkbox" id="cfgBlockPen"> 块效应参与扣分（默认关：只出标签，不影响分数）</label>
+      <label class="chk"><input type="checkbox" id="cfgBppAdj"> bpp 调整参与评分（默认开：欠码率 −10，高码率密度 +3/+6）</label>
+
+      <label>探测并发（预留项）<input class="input" id="cfgConc" type="number" min="1" max="8"></label>
+    </div>
+
+    <div class="cfgsec">
+      <h4>评分口径（按人工打分标定，固定）</h4>
+      <div class="pre" style="white-space:pre-wrap;line-height:1.7">综合评分 = 清晰度分 + bpp 调整（块效应只出标签）
+
+· 清晰度分：由「模糊指数」换算（18 个人工打分样本保序回归标定）
+  0.8→97 ｜ 1.0→96 ｜ 1.2→94 ｜ 1.6→88 ｜ 2.0→72
+  2.4→68 ｜ 2.8→50 ｜ 3.2→38 ｜ 3.4→33 ｜ 4.2→20 ｜ ≥5.7→18
+· 模糊指数 = 边缘 10%→90% 上升距离 ÷ 画面宽度 ×1000 + 锐化过冲
+  （16 帧取 p20，只解关键帧）
+· bpp 调整（bpp = 码率 ÷ 宽 ÷ 高 ÷ min(帧率,30)）
+  < 0.05 → −10 ｜ 0.05~0.10 → 0
+  0.10~0.15 → +3 ｜ > 0.15 → +6（需 高≥1000 且 清晰度≥60）
+· 块效应：只作提示标签，不扣分
+· 结论：< 60 差 ｜ ≥ 60 优秀</div>
+    </div>
+    <div class="cfgsec">
+      <h4>访问控制</h4>
+      <label>访问 PIN（留空不启用）<input class="input" id="cfgPin"></label>
+    </div>
+    <div class="hint">保存后会用已有数据立即重算参数分/综合分/结论；画面相不变时不会重新抽帧。</div>
+    <div class="dialog-actions">
+      <button class="btn ghost" data-close>取消</button>
+      <button class="btn ghost" id="cfgResetPlan" title="忘掉每种格式记住的播放方式">清除播放偏好</button>
+      <button class="btn ghost" id="cfgReset">恢复默认</button>
+      <button class="btn primary" id="cfgSave">保存并重算</button>
+    </div>
+  </div>
+</div>
+
+<!-- 确认 -->
+<div class="modal" id="mConfirm" hidden>
+  <div class="dialog">
+    <h3 id="cfTitle">确认</h3>
+    <div id="cfBody" class="pre"></div>
+    <div class="dialog-actions">
+      <button class="btn ghost" data-close>取消</button>
+      <button class="btn danger" id="cfOk">确认执行</button>
+    </div>
+  </div>
+</div>
+
+<div class="loginmask" id="loginMask" hidden>
+  <div class="loginbox">
+    <div class="logo">QC</div>
+    <h3>未登录飞牛</h3>
+    <p class="hint" id="loginMsg">请先登录 fnOS 后再打开本应用</p>
+    <a class="btn primary" href="/" target="_top">去登录 fnOS</a>
+    <button class="btn ghost" onclick="location.reload()">我已登录，重新加载</button>
+  </div>
+</div>
+
+<script src="app.js?v=38"></script>
+</body>
+</html>

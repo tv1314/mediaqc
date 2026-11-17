@@ -1,0 +1,14 @@
+appname               = mediaqc
+version               = 1.1.0
+display_name          = 媒体画质管家
+desc                  = 扫描媒体库视频的画质信息，按分辨率/码率/编码/抽帧体检分级，支持预览、保留、删除与移动。
+platform              = x86
+source                = thirdparty
+maintainer            = 七七玩NAS
+maintainer_url        = https://github.com/tv1314/mediaqc
+distributor           = 七七玩NAS
+ctl_stop              = true
+os_min_version        = 1.2.0
+desktop_uidir         = ui
+desktop_applaunchname = mediaqc.Application
+changelog             = 1.1.0 统一网关 + 窗口内打开 + 登录校验 + 融合扫描/画面体检/综合分

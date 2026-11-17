@@ -1,0 +1,32 @@
+# ---------- 构建产物 ----------
+*.fpk
+!mediaqc.fpk
+*.tar.gz
+*.tgz
+__pycache__/
+*.py[cod]
+
+# ---------- 运行期数据（只存在于 NAS 上，不入库）----------
+data/
+etc/
+logs/
+thumbs/
+info.log
+*.log
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# ---------- 敏感信息，绝不提交 ----------
+*.key
+*.pem
+.seal.key
+config.local.json
+
+# ---------- 编辑器 / 系统 ----------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

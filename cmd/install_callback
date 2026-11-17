@@ -1,0 +1,22 @@
+#!/bin/bash
+
+### Called after install: prepare data/config directories.
+
+mkdir -p "${TRIM_PKGVAR}/thumbs" "${TRIM_PKGVAR}/logs" "${TRIM_PKGETC}"
+
+if [ ! -f "${TRIM_PKGETC}/config.json" ]; then
+    cat > "${TRIM_PKGETC}/config.json" <<'EOF'
+{
+  "port": 8123,
+  "pin": "",
+  "roots": [],
+  "concurrency": 4,
+  "min_width": 1280,
+  "bpp_min": 0.04,
+  "br_1080": 2000000,
+  "br_720": 1000000
+}
+EOF
+fi
+
+exit 0
